@@ -1,0 +1,73 @@
+{% extends 'store/base.html' %}
+{% block title %}Order History{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Your Orders</h2>
+
+{% if orders %}
+  {% for block in orders %}
+    {% with order=block.order items=block.items latest=block.latest_delivery %}
+    <div class="card mb-3 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Order #{{ order.id }}</strong>
+        <small class="text-muted">
+          Status: {{ order.delivery_status }} |
+          Ordered on: {{ order.ordered_at|date:"d M Y" }}
+        </small>
+      </div>
+      <div class="card-body">
+        {% for item in items %}
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex align-items-center">
+              <img src="{{ item.product.image.url }}" width="50" height="50" class="me-2 rounded">
+              <div>
+                {{ item.product.name }} × {{ item.quantity }}<br>
+                <small class="text-muted">
+                  Delivery by {{ item.estimated_delivery|date:"d M Y" }}
+                </small>
+              </div>
+            </div>
+            <div class="fw-bold">
+              ₹{{ item.subtotal|floatformat:2 }}
+            </div>
+          </div>
+        {% endfor %}
+
+        <div class="text-end mt-3 fw-bold">
+          Total: ₹{{ order.price|floatformat:2 }}
+        </div>
+
+        <div class="text-end text-success mt-1">
+          Estimated Delivery: {{ latest|date:"d M Y" }}
+        </div>
+
+        <button class="btn btn-sm btn-outline-info mt-3"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#details{{ order.id }}">
+          View Details
+        </button>
+
+        <div id="details{{ order.id }}" class="collapse mt-3">
+          <p><strong>Delivery Address:</strong><br>
+            {{ order.address1 }}{% if order.address2 %}, {{ order.address2 }}{% endif %},<br>
+            {{ order.city }}, {{ order.state }} – {{ order.pincode }}
+          </p>
+          {% if order.can_return %}
+            <form method="post" action="{% url 'store:return-order' order.id %}">
+              {% csrf_token %}
+              <textarea name="reason" class="form-control mb-2"
+                        placeholder="Reason for return"
+                        required></textarea>
+              <button class="btn btn-warning btn-sm">Request Return</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endwith %}
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info">You haven’t placed any orders yet.</div>
+{% endif %}
+{% endblock %}

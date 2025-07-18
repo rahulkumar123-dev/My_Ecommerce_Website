@@ -1,0 +1,108 @@
+{% extends 'store/base.html' %}
+{% load cart_extras %}
+
+{% block title %}Mobi Flex – Home{% endblock %}
+
+{% block content %}
+<div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-3">
+  {% for product in products %}
+    <div class="col">
+      <div class="card h-100 shadow-sm">
+        <img
+          src="{{ product.image.url }}"
+          class="card-img-top p-2"
+          alt="{{ product.name }}"
+          style="height: 150px; object-fit: contain;"
+        >
+        <div class="card-body text-center">
+          <h6 class="card-title mb-1">{{ product.name|truncatechars:25 }}</h6>
+          <p class="text-success fw-bold mb-1">₹{{ product.price }}</p>
+          <p class="small text-muted mb-2">
+            🚚 Delivery by {{ product.estimated_delivery_date|date:"d M Y" }}
+          </p>
+          <div class="d-flex justify-content-center gap-1">
+            <div class="cart-controls" data-product-id="{{ product.id }}">
+              {% if product.id|stringformat:"s" in cart %}
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-secondary decrease-btn" data-id="{{ product.id }}">−</button>
+                  <button class="btn btn-light disabled">{{ cart|get_item:product.id }}</button>
+                  <button class="btn btn-outline-secondary increase-btn" data-id="{{ product.id }}">+</button>
+                </div>
+              {% else %}
+                <button class="btn btn-sm btn-primary add-to-cart-btn" data-id="{{ product.id }}">Add to Cart</button>
+              {% endif %}
+            </div>
+
+            <!-- Buy Now always available -->
+            <a href="{% url 'store:buy-now' product.id %}" class="btn btn-sm btn-success">Buy Now</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const csrfToken = '{{ csrf_token }}';
+
+  function bindControls() {
+    // Add to Cart
+    document.querySelectorAll('.add-to-cart-btn').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.id;
+        fetch(`/add-to-cart/${id}/`, {
+          headers:{ 'X-Requested-With':'XMLHttpRequest' }
+        })
+        .then(r=>r.json())
+        .then(data=>{
+          btn.outerHTML = `
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary decrease-btn" data-id="${id}">−</button>
+              <button class="btn btn-light disabled">${data.quantity}</button>
+              <button class="btn btn-outline-secondary increase-btn" data-id="${id}">+</button>
+            </div>`;
+          document.getElementById('cart-count').textContent = data.cartCount;
+          bindControls();
+        });
+      };
+    });
+
+    // + / − buttons
+    document.querySelectorAll('.increase-btn, .decrease-btn').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.id;
+        const action = btn.classList.contains('increase-btn') ? 'increase' : 'decrease';
+        fetch("{% url 'store:ajax-update-cart' %}", {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/x-www-form-urlencoded',
+            'X-CSRFToken':csrfToken,
+            'X-Requested-With':'XMLHttpRequest'
+          },
+          body:new URLSearchParams({ product_id:id, action })
+        })
+        .then(r=>r.json())
+        .then(data=>{
+          const ctrl = document.querySelector(`.cart-controls[data-product-id="${id}"]`);
+          if (data.quantity > 0) {
+            ctrl.innerHTML = `
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary decrease-btn" data-id="${id}">−</button>
+                <button class="btn btn-light disabled">${data.quantity}</button>
+                <button class="btn btn-outline-secondary increase-btn" data-id="${id}">+</button>
+              </div>`;
+          } else {
+            ctrl.innerHTML = `<button class="btn btn-sm btn-primary add-to-cart-btn" data-id="${id}">Add to Cart</button>`;
+          }
+          document.getElementById('cart-count').textContent = data.cartCount;
+          bindControls();
+        });
+      };
+    });
+  }
+
+  bindControls();
+});
+</script>
+{% endblock %}

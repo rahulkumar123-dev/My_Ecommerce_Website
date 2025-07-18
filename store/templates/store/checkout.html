@@ -1,0 +1,68 @@
+{% extends 'store/base.html' %}
+{% block title %}Checkout — Mobi Flex{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Checkout</h2>
+
+<form method="post">
+  {% csrf_token %}
+  <ul class="list-group mb-4">
+    {% for item in cart_items %}
+      <li class="list-group-item d-flex justify-content-between">
+        <div>
+          <strong>{{ item.product.name }}</strong> × {{ item.qty }}
+        </div>
+        <div>₹{{ item.subtotal }}</div>
+      </li>
+    {% endfor %}
+    <li class="list-group-item d-flex justify-content-between">
+      <strong>Total</strong><span>₹{{ total }}</span>
+    </li>
+    <li class="list-group-item text-success">
+      <strong>Expected Delivery:</strong> {{ latest_delivery|date:"d M Y" }}
+    </li>
+  </ul>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Address Line 1</label>
+      <input name="address1" class="form-control" required>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Address Line 2 (optional)</label>
+      <input name="address2" class="form-control">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">State</label>
+      <select id="state" name="state" class="form-select" required>
+        <option value="">Choose…</option>
+        {% for s in states %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">City</label>
+      <select id="city" name="city" class="form-select" required>
+        <option value="">First select state</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Pincode</label>
+      <input name="pincode" class="form-control" required>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary mt-4">Place Order</button>
+</form>
+
+<script>
+  document.getElementById('state').onchange = function(){
+    const sid = this.value, city = document.getElementById('city');
+    city.innerHTML = '<option>Loading…</option>';
+    fetch("{% url 'store:get-cities' 0 %}".replace('0',sid))
+      .then(r=>r.json())
+      .then(d=>{
+        city.innerHTML = d.cities.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+      });
+  };
+</script>
+{% endblock %}

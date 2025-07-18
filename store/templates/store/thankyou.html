@@ -1,0 +1,9 @@
+{% extends 'store/base.html' %}
+{% block title %}Order Complete{% endblock %}
+{% block content %}
+<div class="mt-4 text-center">
+  <h2 class="text-success mb-3">✅ Thank you for your purchase!</h2>
+  <p>Your order has been placed successfully.</p>
+  <a href="{% url 'store:product-list' %}" class="btn btn-primary mt-3">Continue Shopping</a>
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'store/base.html' %}
+{% block title %}Your Cart{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Your Shopping Cart</h2>
+
+{% if cart_items %}
+<table class="table table-bordered align-middle">
+  <thead class="table-primary">
+    <tr>
+      <th>Image</th>
+      <th>Product</th>
+      <th class="text-center">Quantity</th>
+      <th class="text-end">Subtotal</th>
+      <th class="text-center">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in cart_items %}
+    <tr id="row-{{ item.product.id }}">
+      <td><img src="{{ item.product.image.url }}" width="60" alt="{{ item.product.name }}"></td>
+      <td>
+        {{ item.product.name }}<br>
+        <small class="text-muted">Delivery by {{ item.product.estimated_delivery_date|date:"d M Y" }}</small>
+      </td>
+      <td class="text-center">
+        <div class="input-group justify-content-center">
+          <!-- DECREASE -->
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm update-cart-btn"
+            data-product-id="{{ item.product.id }}"
+            data-action="decrease"
+            {% if item.qty <= 1 %}disabled{% endif %}
+          >−</button>
+
+          <span class="px-2" id="qty-{{ item.product.id }}">{{ item.qty }}</span>
+
+          <!-- INCREASE -->
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm update-cart-btn"
+            data-product-id="{{ item.product.id }}"
+            data-action="increase"
+          >+</button>
+        </div>
+      </td>
+      <td class="text-end" id="subtotal-{{ item.product.id }}">₹{{ item.subtotal }}</td>
+      <td class="text-center">
+        <a href="{% url 'store:remove-from-cart' item.product.id %}" class="btn btn-sm btn-danger">Remove</a>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="3" class="text-end"><strong>Total:</strong></td>
+      <td class="text-end"><strong id="cart-total">₹{{ total }}</strong></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td colspan="5" class="text-end text-success fw-bold">
+        Expected Delivery: {{ latest_delivery|date:"d M Y" }}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="d-flex justify-content-between">
+  <a href="{% url 'store:product-list' %}" class="btn btn-outline-secondary">Continue Shopping</a>
+  <a href="{% url 'store:checkout' %}" class="btn btn-success">Proceed to Checkout</a>
+</div>
+
+<script>
+  const csrfToken = '{{ csrf_token }}';
+  document.querySelectorAll('.update-cart-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const pid = btn.dataset.productId;
+      const act = btn.dataset.action;
+
+      fetch("{% url 'store:ajax-update-cart' %}", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: new URLSearchParams({ product_id: pid, action: act })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) return;
+        document.getElementById('qty-' + pid).textContent = data.quantity;
+        document.getElementById('subtotal-' + pid).textContent = '₹' + data.subtotal.toFixed(2);
+        document.getElementById('cart-total').textContent    = '₹' + data.cartTotal.toFixed(2);
+        document.getElementById('cart-count').textContent    = data.cartCount;
+        // disable “−” if back to 1
+        const decBtn = document.querySelector(`[data-product-id="${pid}"][data-action="decrease"]`);
+        if (data.quantity <= 1) decBtn.setAttribute('disabled','');
+        else decBtn.removeAttribute('disabled');
+        // remove row if zero
+        if (data.quantity === 0) document.getElementById('row-' + pid).remove();
+      });
+    });
+  });
+</script>
+{% else %}
+<div class="alert alert-info">
+  Your cart is empty. <a href="{% url 'store:product-list' %}" class="alert-link">Go shopping!</a>
+</div>
+{% endif %}
+{% endblock %}

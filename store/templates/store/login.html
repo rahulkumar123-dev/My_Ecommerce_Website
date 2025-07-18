@@ -1,0 +1,36 @@
+{% extends 'store/base.html' %}
+{% load static %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-4">
+    <div class="text-center mb-4">
+      <!-- Larger logo on login page -->
+      <img src="{% static 'images/logo.png' %}" alt="Mobi Flex" width="180">
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="alert alert-{{ msg.tags }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+      <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" id="username" name="username" class="form-control" required autofocus>
+      </div>
+      <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" id="password" name="password" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Login</button>
+    </form>
+
+    <div class="text-center mt-3">
+      <small>New here? <a href="{% url 'store:register' %}">Register instead</a></small>
+    </div>
+  </div>
+</div>
+{% endblock %}
