@@ -1,70 +1,128 @@
 {% extends 'store/base.html' %}
-{% block title %}Your Cart{% endblock %}
+{% load cart_extras %}
+
+{% block title %}{{ product.name }}{% endblock %}
 {% block content %}
-<h2 class="mb-4">Your Shopping Cart</h2>
-{% if cart_items %}
-<table class="table table-bordered align-middle">
-  <thead class="table-primary">
-    <tr>
-      <th>Image</th><th>Product</th><th class="text-center">Qty</th><th class="text-end">Subtotal</th><th>Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for item in cart_items %}
-    <tr id="row-{{ item.product.id }}">
-      <td><img src="{{ item.product.image.url }}" width="60"></td>
-      <td>
-        <strong>{{ item.product.name }}</strong><br>
-        <small class="text-muted">🚚 by {{ item.product.estimated_delivery_date|date:"d M Y" }}</small>
-      </td>
-      <td class="text-center">
-        <button class="btn btn-outline-secondary btn-sm update-cart" data-id="{{ item.product.id }}" data-action="decrease" {% if item.qty==1 %}disabled{% endif %}>−</button>
-        <span class="mx-1" id="qty-{{ item.product.id }}">{{ item.qty }}</span>
-        <button class="btn btn-outline-secondary btn-sm update-cart" data-id="{{ item.product.id }}" data-action="increase">+</button>
-      </td>
-      <td class="text-end" id="sub-{{ item.product.id }}">₹{{ item.subtotal }}</td>
-      <td class="text-center">
-        <a href="{% url 'store:remove-from-cart' item.product.id %}" class="btn btn-danger btn-sm">Remove</a>
-      </td>
-    </tr>
-    {% endfor %}
-    <tr>
-      <td colspan="3" class="text-end"><strong>Total:</strong></td>
-      <td class="text-end" id="cart-total">₹{{ total }}</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td colspan="5" class="text-end text-success">
-        <strong>Expected Delivery:</strong> {{ latest_delivery|date:"d M Y" }}
-      </td>
-    </tr>
-  </tbody>
-</table>
-<div class="d-flex justify-content-between">
-  <a class="btn btn-outline-secondary" href="{% url 'store:product-list' %}">← Continue Shopping</a>
-  <a class="btn btn-success" href="{% url 'store:checkout' %}">Proceed to Checkout →</a>
+<div class="row mt-4">
+  <div class="col-md-5 text-center">
+    <img src="{{ product.image.url }}"
+         class="img-fluid border p-2 bg-white shadow-sm"
+         style="max-height:300px; object-fit:contain;"
+         alt="{{ product.name }}">
+  </div>
+  <div class="col-md-7">
+    <h2 class="fw-bold">{{ product.name }}</h2>
+    <h4 class="text-success fw-bold mt-2">₹{{ product.price }}</h4>
+    <p class="text-muted mb-3">
+      🚚 Delivery by {{ product.estimated_delivery_date|date:"j M Y" }}
+    </p>
+
+    <div class="mb-4">
+      <h5>Description</h5>
+      <p>{{ product.description }}</p>
+    </div>
+
+    <div class="cart-controls" data-product-id="{{ product.id }}">
+      {% if product.id|stringformat:"s" in cart %}
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary decrease-btn"
+                  data-id="{{ product.id }}">−</button>
+          <button class="btn btn-light disabled quantity-value">
+            {{ cart|get_item:product.id }}</button>
+          <button class="btn btn-outline-secondary increase-btn"
+                  data-id="{{ product.id }}">+</button>
+        </div>
+      {% else %}
+        <button class="btn btn-primary add-to-cart-btn btn-sm"
+                data-id="{{ product.id }}">🛒 Add to Cart</button>
+      {% endif %}
+      <button class="btn btn-success buy-now-btn btn-sm ms-2"
+              data-id="{{ product.id }}">⚡ Buy Now</button>
+    </div>
+  </div>
 </div>
 
 <script>
-document.querySelectorAll('.update-cart').forEach(btn=>{
-  btn.onclick = ()=>{
-    fetch("{% url 'store:ajax-update-cart' %}", {
-      method:'POST',
-      headers:{ 'X-CSRFToken':window.CSRF_TOKEN,'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded' },
-      body:`product_id=${btn.dataset.id}&action=${btn.dataset.action}`
-    }).then(r=>r.json()).then(d=>{
-      if (d.success){
-        document.getElementById('qty-'+btn.dataset.id).textContent = d.quantity;
-        document.getElementById('sub-'+btn.dataset.id).textContent = '₹'+d.subtotal;
-        document.getElementById('cart-total').textContent = '₹'+d.cartTotal;
-        document.getElementById('cart-count').textContent = d.cartCount;
-      }
+document.addEventListener("DOMContentLoaded", function(){
+  const csrf = '{{ csrf_token }}';
+
+  function bindDetail(){
+    // ADD TO CART
+    document.querySelectorAll('.add-to-cart-btn').forEach(btn=>{
+      btn.onclick = () => {
+        let id = btn.dataset.id;
+        fetch(`/add-to-cart/${id}/`, {
+          headers:{ 'X-Requested-With':'XMLHttpRequest' }
+        })
+        .then(r=>r.json())
+        .then(d=>{
+          const ctrl = document.querySelector(`.cart-controls[data-product-id="${id}"]`);
+          ctrl.innerHTML = `
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary decrease-btn" data-id="${id}">−</button>
+              <button class="btn btn-light disabled">${d.quantity}</button>
+              <button class="btn btn-outline-secondary increase-btn" data-id="${id}">+</button>
+            </div>
+            <button class="btn btn-success buy-now-btn btn-sm ms-2" data-id="${id}">⚡ Buy Now</button>`;
+          document.getElementById('cart-count').textContent = d.cartCount;
+          bindDetail();
+        });
+      };
     });
+
+    // + / −
+    document.querySelectorAll('.increase-btn, .decrease-btn').forEach(btn=>{
+      btn.onclick = () => {
+        let id     = btn.dataset.id;
+        let action = btn.classList.contains('increase-btn') ? 'increase' : 'decrease';
+        fetch("{% url 'store:ajax-update-cart' %}", {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/x-www-form-urlencoded',
+            'X-CSRFToken':csrf,
+            'X-Requested-With':'XMLHttpRequest'
+          },
+          body:new URLSearchParams({product_id:id, action})
+        })
+        .then(r=>r.json())
+        .then(d=>{
+          const ctrl = document.querySelector(`.cart-controls[data-product-id="${id}"]`);
+          if (d.quantity > 0) {
+            ctrl.innerHTML = `
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary decrease-btn" data-id="${id}">−</button>
+                <button class="btn btn-light disabled">${d.quantity}</button>
+                <button class="btn btn-outline-secondary increase-btn" data-id="${id}">+</button>
+              </div>
+              <button class="btn btn-success buy-now-btn btn-sm ms-2" data-id="${id}">⚡ Buy Now</button>`;
+          } else {
+            ctrl.innerHTML = `
+              <button class="btn btn-primary add-to-cart-btn btn-sm" data-id="${id}">🛒 Add to Cart</button>
+              <button class="btn btn-success buy-now-btn btn-sm ms-2" data-id="${id}">⚡ Buy Now</button>`;
+          }
+          document.getElementById('cart-count').textContent = d.cartCount;
+          bindDetail();
+        });
+      };
+    });
+
+    // BUY NOW
+    // BUY NOW
+// BUY NOW (detail page)
+document.querySelectorAll('.buy-now-btn').forEach(btn=>{
+  btn.onclick = () => {
+    const id = btn.dataset.id;
+    const qtyEl = document.querySelector(`.cart-controls[data-product-id="${id}"] .btn-light`);
+    let qty = qtyEl ? parseInt(qtyEl.textContent) : 0;
+    const target = qty >= 1 
+        ? `/buy-now/${id}/?quantity=${qty}`
+        : `/buy-now/${id}/`; // default 1
+    window.location.href = target;
   };
 });
-</script>
+  }
 
-{% else %}
-<div class="alert alert-info">Your cart is empty. <a href="{% url 'store:product-list' %}">Start shopping</a>.</div>
-{% endif %}
+  bindDetail();
+});
+</script>
 {% endblock %}

@@ -2,24 +2,29 @@
 {% load cart_extras %}
 
 {% block title %}Mobi Flex – Home{% endblock %}
-
 {% block content %}
 <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-3">
   {% for product in products %}
     <div class="col">
       <div class="card h-100 shadow-sm">
-        <img
-          src="{{ product.image.url }}"
-          class="card-img-top p-2"
-          alt="{{ product.name }}"
-          style="height: 150px; object-fit: contain;"
-        >
+        <!-- make image clickable -->
+        <a href="{% url 'store:product-cart' product.id %}" class="d-block text-center p-2" style="height:150px;">
+          <img
+            src="{{ product.image.url }}"
+            class="img-fluid"
+            alt="{{ product.name }}"
+            style="max-height:100%; object-fit:contain;"
+          >
+        </a>
         <div class="card-body text-center">
-          <h6 class="card-title mb-1">{{ product.name|truncatechars:25 }}</h6>
-          <p class="text-success fw-bold mb-1">₹{{ product.price }}</p>
-          <p class="small text-muted mb-2">
-            🚚 Delivery by {{ product.estimated_delivery_date|date:"d M Y" }}
-          </p>
+          <!-- also link name/price to detail page -->
+          <a href="{% url 'store:product-cart' product.id %}" class="text-decoration-none text-dark">
+            <h6 class="card-title mb-1">{{ product.name|truncatechars:25 }}</h6>
+            <p class="text-success fw-bold mb-1">₹{{ product.price }}</p>
+            <p class="small text-muted mb-2">
+              🚚 Delivery by {{ product.estimated_delivery_date|date:"d M Y" }}
+            </p>
+          </a>
           <div class="d-flex justify-content-center gap-1">
             <div class="cart-controls" data-product-id="{{ product.id }}">
               {% if product.id|stringformat:"s" in cart %}
@@ -32,9 +37,7 @@
                 <button class="btn btn-sm btn-primary add-to-cart-btn" data-id="{{ product.id }}">Add to Cart</button>
               {% endif %}
             </div>
-
-            <!-- Buy Now always available -->
-            <a href="{% url 'store:buy-now' product.id %}" class="btn btn-sm btn-success">Buy Now</a>
+            <button class="btn btn-sm btn-success buy-now-home" data-id="{{ product.id }}">Buy Now</button>
           </div>
         </div>
       </div>
@@ -46,44 +49,55 @@
 document.addEventListener("DOMContentLoaded", function () {
   const csrfToken = '{{ csrf_token }}';
 
-  function bindControls() {
-    // Add to Cart
-    document.querySelectorAll('.add-to-cart-btn').forEach(btn=>{
+  function bindHome() {
+  // BUY NOW (home page)
+document.querySelectorAll('.buy-now-home').forEach(btn => {
+  btn.onclick = () => {
+    const id = btn.dataset.id;
+    const qtyEl = document.querySelector(`.cart-controls[data-product-id="${id}"] .btn-light`);
+    let qty = qtyEl ? parseInt(qtyEl.textContent) : 0;
+    const target = qty >= 1 
+        ? `/buy-now/${id}/?quantity=${qty}`
+        : `/buy-now/${id}/`; // default 1
+    window.location.href = target;
+  };
+});
+    document.querySelectorAll('.add-to-cart-btn').forEach(btn => {
       btn.onclick = () => {
         const id = btn.dataset.id;
         fetch(`/add-to-cart/${id}/`, {
-          headers:{ 'X-Requested-With':'XMLHttpRequest' }
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
-        .then(r=>r.json())
-        .then(data=>{
-          btn.outerHTML = `
+        .then(r => r.json())
+        .then(data => {
+          const ctrl = document.querySelector(`.cart-controls[data-product-id="${id}"]`);
+          ctrl.innerHTML = `
             <div class="btn-group btn-group-sm">
               <button class="btn btn-outline-secondary decrease-btn" data-id="${id}">−</button>
               <button class="btn btn-light disabled">${data.quantity}</button>
               <button class="btn btn-outline-secondary increase-btn" data-id="${id}">+</button>
             </div>`;
           document.getElementById('cart-count').textContent = data.cartCount;
-          bindControls();
+          bindHome();
         });
       };
     });
 
-    // + / − buttons
-    document.querySelectorAll('.increase-btn, .decrease-btn').forEach(btn=>{
+    document.querySelectorAll('.increase-btn, .decrease-btn').forEach(btn => {
       btn.onclick = () => {
         const id = btn.dataset.id;
         const action = btn.classList.contains('increase-btn') ? 'increase' : 'decrease';
         fetch("{% url 'store:ajax-update-cart' %}", {
-          method:'POST',
-          headers:{
-            'Content-Type':'application/x-www-form-urlencoded',
-            'X-CSRFToken':csrfToken,
-            'X-Requested-With':'XMLHttpRequest'
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
           },
-          body:new URLSearchParams({ product_id:id, action })
+          body: new URLSearchParams({ product_id: id, action })
         })
-        .then(r=>r.json())
-        .then(data=>{
+        .then(r => r.json())
+        .then(data => {
           const ctrl = document.querySelector(`.cart-controls[data-product-id="${id}"]`);
           if (data.quantity > 0) {
             ctrl.innerHTML = `
@@ -96,13 +110,13 @@ document.addEventListener("DOMContentLoaded", function () {
             ctrl.innerHTML = `<button class="btn btn-sm btn-primary add-to-cart-btn" data-id="${id}">Add to Cart</button>`;
           }
           document.getElementById('cart-count').textContent = data.cartCount;
-          bindControls();
+          bindHome();
         });
       };
     });
   }
 
-  bindControls();
+  bindHome();
 });
 </script>
 {% endblock %}

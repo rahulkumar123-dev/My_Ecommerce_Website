@@ -44,160 +44,212 @@ def ajax_update_cart(request):
       'cartCount': sum(cart.values())
     })
 
+@login_required
 def product_list(request):
     return render(request, 'store/product_list.html', {
       'products': Product.objects.all(),
       'cart':     request.session.get('cart', {})
     })
 
-def product_detail(request,product_id):
-    return render(request,'store/product_cart.html',{
-        'product':get_object_or_404(Product,id=product_id)
+@login_required
+def product_detail(request, product_id):
+    # pass current cart so detail page can build the same controls
+    product = get_object_or_404(Product, id=product_id)
+    cart    = request.session.get('cart', {})
+    return render(request, 'store/product_cart.html', {
+        'product': product,
+        'cart':    cart,
     })
 
 def add_to_cart(request, product_id):
+    # Support both AJAX GET (from product detail) and normal POST
     cart = request.session.get('cart', {})
     pid  = str(product_id)
-    cart[pid] = cart.get(pid, 0) + 1
+
+    # read quantity from querystring (?quantity=N) or default to 1
+    try:
+        qty = int(request.GET.get('quantity', 1))
+    except ValueError:
+        qty = 1
+
+    # increment by qty
+    cart[pid] = cart.get(pid, 0) + qty
     request.session['cart'] = cart
 
-    # AJAX?
+    # AJAX wants JSON back
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({
-          'quantity': cart[pid],
-          'cartCount': sum(cart.values())
+            'quantity': cart[pid],
+            'cartCount': sum(cart.values())
         })
+    # otherwise, redirect to product list
     return redirect('store:product-list')
 
+@login_required
 def view_cart(request):
-    cart_items,total,latest=[],0,None
-    cart = request.session.get('cart',{})
-    for pid,qty in cart.items():
-        p = get_object_or_404(Product,id=pid)
-        sub=p.price*qty
-        cart_items.append({'product':p,'qty':qty,'subtotal':sub})
-        total+=sub
-        ed=p.estimated_delivery_date
-        if not latest or ed>latest: latest=ed
-    return render(request,'store/cart.html',{
-        'cart_items':cart_items,'total':total,'latest_delivery':latest
+    cart_items, total, latest = [], 0, None
+    cart = request.session.get('cart', {})
+    for pid, qty in cart.items():
+        p = get_object_or_404(Product, id=pid)
+        sub = p.price * qty
+        cart_items.append({'product': p, 'qty': qty, 'subtotal': sub})
+        total += sub
+        ed = p.estimated_delivery_date
+        if not latest or ed > latest:
+            latest = ed
+    return render(request, 'store/cart.html', {
+        'cart_items': cart_items,
+        'total':      total,
+        'latest_delivery': latest
     })
 
-def buy_now(request,product_id):
-    cart=request.session.get('cart',{})
-    pid=str(product_id)
-    if pid not in cart: cart[pid]=1
-    request.session['cart']=cart
+def buy_now(request, product_id):
+    # “Buy Now” should set the cart to exactly the chosen quantity, then go to cart
+    cart = request.session.get('cart', {})
+    pid  = str(product_id)
+
+    # parse ?quantity=N (default 1)
+    try:
+        qty = int(request.GET.get('quantity', 1))
+    except ValueError:
+        qty = 1
+    if qty < 1:
+        qty = 1
+
+    # set to exactly that amount
+    cart[pid] = qty
+    request.session['cart'] = cart
+
     return redirect('store:cart')
 
-def remove_from_cart(request,product_id):
-    cart=request.session.get('cart',{})
-    cart.pop(str(product_id),None)
-    request.session['cart']=cart
+def remove_from_cart(request, product_id):
+    cart = request.session.get('cart', {})
+    cart.pop(str(product_id), None)
+    request.session['cart'] = cart
     return redirect('store:cart')
 
 def update_cart(request):
-    if request.method=='POST':
-        pid,act=str(request.POST['product_id']),request.POST['action']
-        cart=request.session.get('cart',{})
+    if request.method == 'POST':
+        pid = str(request.POST['product_id'])
+        act = request.POST['action']
+        cart = request.session.get('cart', {})
         if pid in cart:
-            if act=='increase': cart[pid]+=1
-            elif act=='decrease':
-                if cart[pid]>1: cart[pid]-=1
-                else: cart.pop(pid,None)
-        request.session['cart']=cart
+            if act == 'increase':
+                cart[pid] += 1
+            elif act == 'decrease':
+                if cart[pid] > 1:
+                    cart[pid] -= 1
+                else:
+                    cart.pop(pid, None)
+        request.session['cart'] = cart
     return redirect('store:cart')
 
 @login_required
 def checkout(request):
-    if not request.session.get('cart'): return redirect('store:product-list')
-    items,total,latest=[],0,None
-    for pid,qty in request.session['cart'].items():
-        p=get_object_or_404(Product,id=pid)
-        sub=p.price*qty; items.append({'product':p,'qty':qty,'subtotal':sub}); total+=sub
-        ed=p.estimated_delivery_date
-        if not latest or ed>latest: latest=ed
-    states=State.objects.all()
-    if request.method=='POST':
-        o=Order.objects.create(
-          user=request.user,price=total,
-          address1=request.POST['address1'],address2=request.POST.get('address2',''),
-          city=request.POST['city'],state=request.POST['state'],pincode=request.POST['pincode']
+    if not request.session.get('cart'):
+        return redirect('store:product-list')
+
+    items, total, latest = [], 0, None
+    for pid, qty in request.session['cart'].items():
+        p = get_object_or_404(Product, id=pid)
+        sub = p.price * qty
+        items.append({'product': p, 'qty': qty, 'subtotal': sub})
+        total += sub
+        ed = p.estimated_delivery_date
+        if not latest or ed > latest:
+            latest = ed
+
+    states = State.objects.all()
+    if request.method == 'POST':
+        o = Order.objects.create(
+          user=request.user,
+          price=total,
+          address1=request.POST['address1'],
+          address2=request.POST.get('address2', ''),
+          city=request.POST['city'],
+          state=request.POST['state'],
+          pincode=request.POST['pincode']
         )
         for it in items:
-            OrderItem.objects.create(order=o,product=it['product'],quantity=it['qty'])
-        request.session['cart']={}
+            OrderItem.objects.create(order=o, product=it['product'], quantity=it['qty'])
+        request.session['cart'] = {}
         return redirect('store:thankyou')
-    return render(request,'store/checkout.html',{
-        'cart_items':items,'total':total,'latest_delivery':latest,'states':states
+
+    return render(request, 'store/checkout.html', {
+        'cart_items': items,
+        'total': total,
+        'latest_delivery': latest,
+        'states': states
     })
 
 @login_required
 def thankyou(request):
-    return render(request,'store/thankyou.html')
+    return render(request, 'store/thankyou.html')
 
 @login_required
 def order_history(request):
-    raw_orders = Order.objects.filter(user=request.user).order_by('-ordered_at')
+    # Build each order with its items and compute latest delivery
+    raw = Order.objects.filter(user=request.user).order_by('-ordered_at')
     orders = []
-    for o in raw_orders:
+    for o in raw:
         items = []
-        latest_delivery = None
+        latest = None
         for itm in o.items.all():
             sub = itm.product.price * itm.quantity
             items.append({
                 'product': itm.product,
                 'quantity': itm.quantity,
                 'subtotal': sub,
-                'estimated_delivery': itm.product.estimated_delivery_date
+                'delivery': itm.product.estimated_delivery_date
             })
             ed = itm.product.estimated_delivery_date
-            if not latest_delivery or ed > latest_delivery:
-                latest_delivery = ed
-
-        orders.append({
-            'order': o,
-            'items': items,
-            'latest_delivery': latest_delivery,
-        })
-
+            if not latest or ed > latest:
+                latest = ed
+        orders.append({'order': o, 'items': items, 'latest_delivery': latest})
     return render(request, 'store/order_history.html', {
         'orders': orders,
         'today': date.today(),
     })
 
 @login_required
-def return_order(request,order_id):
-    o=get_object_or_404(Order,id=order_id,user=request.user)
-    if request.method=='POST' and o.can_return():
-        o.is_returned=True; o.return_reason=request.POST['reason']; o.save()
-        messages.success(request,'Return requested')
+def return_order(request, order_id):
+    o = get_object_or_404(Order, id=order_id, user=request.user)
+    if request.method == 'POST' and o.can_return():
+        o.is_returned = True
+        o.return_reason = request.POST.get('reason','')
+        o.save()
+        messages.success(request, 'Return requested.')
     return redirect('store:order-history')
 
-def get_cities(request,state_id):
-    return JsonResponse({'cities':list(City.objects.filter(state_id=state_id).values('id','name'))})
+def get_cities(request, state_id):
+    cities = City.objects.filter(state_id=state_id).values('id','name')
+    return JsonResponse({'cities': list(cities)})
 
 def register(request):
     if request.method == 'POST':
-        uname = request.POST.get('username', '').strip()
-        email = request.POST.get('email', '').strip()
-        pwd   = request.POST.get('password', '')
+        uname = request.POST.get('username','').strip()
+        email = request.POST.get('email','').strip()
+        pwd   = request.POST.get('password','')
         if not (uname and email and pwd):
             messages.error(request, "All fields are required.")
         elif User.objects.filter(username=uname).exists():
-            messages.error(request, "Username already taken.")
+            messages.error(request, "Username taken.")
         else:
-            user = User.objects.create_user(username=uname, password=pwd, email=email)
-            messages.success(request, "Registration successful! Please log in.")
+            User.objects.create_user(username=uname, email=email, password=pwd)
+            messages.success(request, "Registered! Please log in.")
             return redirect('store:login')
     return render(request, 'store/register.html')
 
 def user_login(request):
-    if request.method=='POST':
-        u=authenticate(request,username=request.POST['username'],password=request.POST['password'])
-        if u: auth_login(request,u); return redirect('store:product-list')
-        messages.error(request,'Invalid credentials')
-    return render(request,'store/login.html')
+    if request.method == 'POST':
+        u = authenticate(request,
+                         username=request.POST['username'],
+                         password=request.POST['password'])
+        if u:
+            auth_login(request, u)
+            return redirect('store:product-list')
+        messages.error(request, 'Invalid credentials')
+    return render(request, 'store/login.html')
 
 @login_required
 def user_logout(request):
